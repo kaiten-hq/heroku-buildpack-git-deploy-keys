@@ -1,52 +1,59 @@
 # heroku-buildpack-git-deploy-keys
-Heroku buildpack to let you use git deploy keys with your private repositories
+Heroku buildpack to let you add an SSH private key to an heroku app so it can access private GitHub repositories during `bundle install`
+
+### Installation
 
 ### Step 1
-Register a deploy key for a github repository
-[Github Instructions](https://developer.github.com/guides/managing-deploy-keys/#deploy-keys)
-
-### Step 2
-Create a ```GITHUB_DEPLOY_KEY``` environment variable with the private key that you registered on your Heroku
+Create a ```GIT_DEPLOY_KEY``` environment variable with the private key that you registered on your Heroku
 [Heroku Instructions](https://devcenter.heroku.com/articles/config-vars#setting-up-config-vars-for-a-deployed-application)
 
 I do
 
 ```
-heroku config:set GITHUB_DEPLOY_KEY="`cat /path/to/key`"
+heroku config:set GIT_DEPLOY_KEY="`cat /path/to/key`"
 ```
+
+### Step 2
+Optionally configure `GIT_HOST`, `GIT_USER` and `GIT_HOST_HASH`. If not provided, they will default to `github.com`,`git` and github hashes respectively.
+
+```
+heroku config:set GIT_HOST=my-git-host.example.com
+heroku config:set GIT_USER=git-party
+heroku config:set GIT_HOST_HASH="git-host.example.com ssh-rsa AAABBBCCC...CCCXXX"
+```
+
+Getting the host key can be a pain so the following is a quick and dirty solution;
+1st backup and clear out your ~/.ssh/known_hosts file, then connect to each host with ssh, which will prompt you with host hash fingerprint. Verify these and accept the connection.
+When you're done doing that you can do
+
+```
+ heroku config:set GIT_HOST_HASH="`cat ~/.ssh/known_hosts`"
+```
+
+Then restore your known_hosts backup file.
 
 ### Step 3
-Create a ```GITHUB_HOST_HASH``` environment variable with the identification keys for the hosts that you're going to connect to. These are the keys found in ```~/.ssh/known_hosts```.
-
-I backed up my ~/.ssh/known_hosts, connected to each host manually via ssh, and then did:
+Use this custom repository as custom buildpack for heroku deployment.
+This buildpack should be executed first as it takes care of setting up the SSH environment, for accessing private
+repos.
 
 ```
-heroku config:set GITHUB_HOST_HASH="`cat ~/.ssh/known_hosts`"
+heroku buildpacks:set --index 1 "https://github.com/siassaj/heroku-buildpack-git-deploy-keys.git#master"
+heroku buildpacks:add 'heroku/ruby'
 ```
+The `--index 1` tells heroku to run this custom buildpack before other buildpacks.
+Read more about using third-party buildpacks in heroku https://devcenter.heroku.com/articles/third-party-buildpacks#using-a-custom-buildpack
 
-Afterwards I restored my old known_hosts file.
+`heroku buildpacks:add 'heroku/ruby'` tells heroku to use the default buildpack for Ruby applications.
+Use the appropriate buildpack for your application.
+Default buildpacks available in Heroku https://devcenter.heroku.com/articles/buildpacks#officially-supported-buildpacks
 
-### Step 4
-Set your Heroku app's default buildpack to heroku-buildpack-compose
-[Instructions](https://github.com/bwhmather/heroku-buildpack-compose)
+### Development / Testing
 
-You can probably use buildpack-multi, though I haven't tried.
+#### WARNING
+Testing on your local machine with the test runner _will_ clobber ~/.ssh/known_hosts and  ~/.ssh/private_key file if they exist. I just destroyed my ~/.ssh/id_rsa and ~/.ssh/known_hosts testing this. I renamed the key being used to private_key (also because we can't be sure it'll be an RSA id anyway) so it should be less devastating but you've been warned. Best is probably to chmod everything in ~/.ssh to 0400.
 
-### 5
-Create a .buildpacks file if you already haven't in the root directory of your app. Make sure it includes this buildpack, and any other buildpacks you need. I'm using Ruby on Rails, so I have:
-
-NOTE: Put this buildpack first!
-
-```sh
-$ cat .buildpacks
-
-https://github.com/siassaj/heroku-buildpack-git-deploy-keys
-https://github.com/heroku/heroku-buildpack-ruby
-```
-
-### 6
-Commit the .buildpacks file to your repository and push to Heroku. Cross fingers.
-
+A great way to test is using Heroku's buildpack test runner. See https://github.com/heroku/heroku-buildpack-testrunner. To set up, run these commands:
 
 #### Shoutout
 This package draws very heavily from
